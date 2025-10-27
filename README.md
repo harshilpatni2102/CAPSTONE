@@ -167,7 +167,7 @@ streamlit run app/app.py
 
 Then open your browser to `http://localhost:8501`
 
-**Features:**
+**Features:**streamlit run app/app.py
 - Enter custom reviews for real-time prediction
 - View confidence scores and probability distributions
 - Try sample reviews
