@@ -232,7 +232,7 @@ def load_models():
 
 
 def predict_sentiment(text, model, vectorizer):
-    """Predict sentiment for given text."""
+    """Predict sentiment for given text with intelligent neutral detection."""
     # Clean text
     cleaned_text = clean_text(text)
     
@@ -258,6 +258,38 @@ def predict_sentiment(text, model, vectorizer):
         # Apply softmax to convert decision scores to probabilities
         exp_scores = np.exp(decision_scores - np.max(decision_scores))
         probabilities = exp_scores / exp_scores.sum()
+    
+    # INTELLIGENT NEUTRAL DETECTION
+    if probabilities is not None and len(probabilities) == 3:
+        pos_prob = probabilities[2]  # Positive probability
+        neg_prob = probabilities[0]  # Negative probability
+        neu_prob = probabilities[1]  # Neutral probability
+        
+        # Define keywords for mixed sentiment detection
+        positive_keywords = ['good', 'great', 'excellent', 'amazing', 'love', 'best', 'perfect', 'nice', 'awesome', 'fantastic', 'wonderful']
+        negative_keywords = ['bad', 'poor', 'terrible', 'worst', 'hate', 'awful', 'horrible', 'disappointing', 'useless', 'waste']
+        contrast_words = ['but', 'however', 'though', 'although', 'except', 'yet', 'while']
+        
+        # Count sentiment indicators in the text
+        text_lower = text.lower()
+        pos_count = sum(1 for word in positive_keywords if word in text_lower)
+        neg_count = sum(1 for word in negative_keywords if word in text_lower)
+        has_contrast = any(word in text_lower for word in contrast_words)
+        
+        # Override prediction to Neutral if mixed sentiment detected
+        if (pos_count > 0 and neg_count > 0) or \
+           (has_contrast and pos_count > 0 and neg_count > 0) or \
+           (abs(pos_prob - neg_prob) < 0.3 and max(pos_prob, neg_prob) < 0.7):
+            # Mixed sentiment: has both positive and negative aspects
+            prediction = 1  # Set to Neutral
+            sentiment_label = 'Neutral'
+            # Adjust probabilities to reflect neutrality
+            total = pos_prob + neg_prob
+            if total > 0:
+                neu_prob = 0.5 + (min(pos_prob, neg_prob) / total) * 0.3
+                pos_prob = pos_prob * (1 - neu_prob) / total
+                neg_prob = neg_prob * (1 - neu_prob) / total
+                probabilities = np.array([neg_prob, neu_prob, pos_prob])
     
     return prediction, sentiment_label, probabilities
 
@@ -443,14 +475,14 @@ def main():
                                         ),
                                         text=[f"{p:.1f}%" for p in probabilities * 100],
                                         textposition='outside',
-                                        textfont=dict(size=14, color='#333', family='Poppins'),
+                                        textfont=dict(size=14, color='#333'),
                                     )
                                 ])
                                 
                                 fig.update_layout(
                                     title=dict(
                                         text="Probability Distribution",
-                                        font=dict(size=18, color='#667eea', family='Poppins', weight=600)
+                                        font=dict(size=18, color='#667eea')
                                     ),
                                     xaxis_title="Sentiment Category",
                                     yaxis_title="Confidence (%)",
@@ -459,7 +491,7 @@ def main():
                                     height=350,
                                     paper_bgcolor='rgba(0,0,0,0)',
                                     plot_bgcolor='rgba(102,126,234,0.05)',
-                                    font=dict(family='Poppins', size=12, color='#333'),
+                                    font=dict(size=12, color='#333'),
                                     margin=dict(t=60, b=40, l=40, r=40)
                                 )
                                 

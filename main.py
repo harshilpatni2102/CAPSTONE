@@ -146,7 +146,7 @@ class SentimentAnalysisPipeline:
         
         # SVM
         print("\n   Training SVM...")
-        svm_model = SVC(kernel='linear', random_state=42)
+        svm_model = SVC(kernel='linear', probability=True, random_state=42)
         svm_model.fit(self.X_train_tfidf, self.y_train)
         self.models['SVM'] = svm_model
         self._evaluate_model('SVM', svm_model)
@@ -266,7 +266,7 @@ class SentimentAnalysisPipeline:
 
 def predict_sentiment(review_text, models_dir='models'):
     """
-    Predict sentiment for a given review.
+    Predict sentiment for a given review with intelligent neutral detection.
     
     Parameters:
     -----------
@@ -291,6 +291,38 @@ def predict_sentiment(review_text, models_dir='models'):
     # Get probability if available
     if hasattr(model, 'predict_proba'):
         probabilities = model.predict_proba(vectorized)[0]
+        
+        # INTELLIGENT NEUTRAL DETECTION
+        # Check for mixed sentiment indicators
+        pos_prob = probabilities[2]  # Positive probability
+        neg_prob = probabilities[0]  # Negative probability
+        neu_prob = probabilities[1]  # Neutral probability
+        
+        # Define keywords for mixed sentiment detection
+        positive_keywords = ['good', 'great', 'excellent', 'amazing', 'love', 'best', 'perfect', 'nice', 'awesome']
+        negative_keywords = ['bad', 'poor', 'terrible', 'worst', 'hate', 'awful', 'horrible', 'disappointing']
+        contrast_words = ['but', 'however', 'though', 'although', 'except', 'yet']
+        
+        # Count sentiment indicators in the text
+        text_lower = review_text.lower()
+        pos_count = sum(1 for word in positive_keywords if word in text_lower)
+        neg_count = sum(1 for word in negative_keywords if word in text_lower)
+        has_contrast = any(word in text_lower for word in contrast_words)
+        
+        # Override prediction to Neutral if mixed sentiment detected
+        if (pos_count > 0 and neg_count > 0) or \
+           (has_contrast and pos_count > 0 and neg_count > 0) or \
+           (abs(pos_prob - neg_prob) < 0.3 and max(pos_prob, neg_prob) < 0.7):
+            # Mixed sentiment: has both positive and negative aspects
+            prediction = 1  # Set to Neutral
+            # Adjust probabilities to reflect neutrality
+            total = pos_prob + neg_prob
+            if total > 0:
+                neu_prob = 0.5 + (min(pos_prob, neg_prob) / total) * 0.3
+                pos_prob = pos_prob * (1 - neu_prob) / total
+                neg_prob = neg_prob * (1 - neu_prob) / total
+                probabilities = np.array([neg_prob, neu_prob, pos_prob])
+        
         confidence = probabilities[prediction]
         
         return {
